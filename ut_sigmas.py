@@ -1,6 +1,4 @@
 import numpy as np
-import numpy.matlib
-import scipy.io as sp
 
 def ut_sigmas(M = None, P = None, c = None):
     A = np.linalg.cholesky(P)

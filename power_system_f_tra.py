@@ -49,7 +49,7 @@ def power_system_f_tra(x, para):
     dedp[mac_em_idx] = 0
     
     deqp[mac_tra_idx] = (Efd[mac_tra_idx] - eqp[mac_tra_idx] - (xd[mac_tra_idx]-xdp[mac_tra_idx])*idg[mac_tra_idx])/Td0p[mac_tra_idx]
-    dedp[mac_tra_idx] = (-edp[mac_tra_idx] + (xq[mac_tra_idx] - xqp[mac_tra_idx])*iqg[mac_tra_idx])/Td0p[mac_tra_idx]
+    dedp[mac_tra_idx] = (-edp[mac_tra_idx] + (xq[mac_tra_idx] - xqp[mac_tra_idx])*iqg[mac_tra_idx])/Tq0p[mac_tra_idx]
     dstate = np.concatenate((ddlt, domg, deqp, dedp))
     x_n1 = x[:4*n_mac] + dt * dstate
 
@@ -70,4 +70,5 @@ def power_system_f_tra(x, para):
 
     dstate1 = np.concatenate((ddlt1, domg1, deqp1, dedp1))
     x_n = x[:4*n_mac] + dt/2*(dstate + dstate1)
+    
     return x_n

@@ -9,6 +9,7 @@ from power_system_h_tra import power_system_h_tra
 from power_system_h_tra1 import power_system_h_tra1
 from ukf_predict1 import ukf_predict1
 from ukf_update1 import ukf_update1
+from nearPD_python import nearPD_python
 
 def test_UKFGPS_SRUKF():
     np.random.seed(0)
@@ -34,11 +35,11 @@ def test_UKFGPS_SRUKF():
         opt_det = Placement_48m
         n_pmu = 24
         sensorpos_opt_det = np.nonzero(opt_det[n_pmu,:])[0]+1
-    index_record = np.zeros((7,8,1))
+    index_record = np.zeros((1,8,1))
     time_record_ukf_gps_record = np.array([])
     time_r = np.array([])
     idx = 0
-    for i in range(n_pmu):
+    if n_pmu:
         idx += 1
         n_tra = mac_tra_idx.shape[0]
         n_s = 4*n_tra + 2*mac_em_idx.shape[0]
@@ -47,13 +48,12 @@ def test_UKFGPS_SRUKF():
         noiseeqpbd = 1e-3
         noiseedpbd = 1e-3
         P = np.block([[noisewbd**2*np.eye(n_mac), np.zeros((n_mac, n_mac)), np.zeros((n_mac, n_tra)), np.zeros((n_mac, n_tra))],[np.zeros((n_mac, n_mac)), noisedltbd**2*np.eye(n_mac), np.zeros((n_mac, n_tra)), np.zeros((n_mac, n_tra))],[np.zeros((n_tra, n_mac)), np.zeros((n_tra, n_mac)), noiseeqpbd**2*np.eye(n_tra), np.zeros((n_tra, n_tra))],[np.zeros((n_tra, n_mac)), np.zeros((n_tra, n_mac)), np.zeros((n_tra, n_tra)), noiseedpbd**2*np.eye(n_tra)]])
-        index,time_record_ukf_gps,needTime,time = testcase(n_mac,n_s,x00,x0,sensorpos_opt_det,para_pf2,P)
-        index_record[:,:,idx-1] = index
+        index, time_record_ukf_gps, needTime, time = testcase(n_mac, n_s, x00, x0, sensorpos_opt_det, para_pf2,P)
+        index_record[:, :, idx-1] = index
         time_r = np.append(time_r, time)
         time_record_ukf_gps_record = np.append(time_record_ukf_gps_record, time_record_ukf_gps)
         savemat(f'.\index_KF_{n_mac}m.mat', {'index_record': index_record, 'index': index, 'time_r': time_r, 'time_record_ukf_gps': time_record_ukf_gps, 'needTime': needTime, 'time': time})
-        # In 'index_record.mat', each row corresponds to EKF, UKF-schol, UKF-GPS,
-        # SR-UKF, UKF-kappa, UKF-modified, UKF-DeltaQ
+        # In 'index_record.mat', each row corresponds to UKF-GPS
 
 def testcase(n_mac, n_s, x00, x0, sensorpos_opt_det, para, P):
     # simulate
@@ -67,7 +67,7 @@ def testcase(n_mac, n_s, x00, x0, sensorpos_opt_det, para, P):
     s_pos = para[0][8]
     states_nonoise = np.zeros((tsequence.size, 4*n_mac))
     states_nonoise[0,:] = x0.reshape(1,-1)
-
+    
     for i in range(1, tsequence.size):
         states_nonoise[i,:] = power_system_f_tra(states_nonoise[i-1,:].reshape(1,-1).T, para).reshape(1,-1)
     states_nonoise = states_nonoise[:, np.squeeze(np.asarray(s_pos-1))]
@@ -117,10 +117,10 @@ def ekf_ukf(n_mac, sensorpos, states, M0, P0, Q, para, tsequence, Tfinal):
     s_pos = para[0][8]
     n_s = s_pos.shape[0]
     U_MM_gps = np.zeros((n_s,Y.shape[1]))
-    U_MM_gps[:,0] = M0[np.squeeze(np.asarray(s_pos-1)),:].flatten()
+    U_MM_gps[:, 0] = M0[np.squeeze(np.asarray(s_pos-1)),:].flatten()
     U_PP_gps = np.zeros((n_s,n_s,Y.shape[1]))
     M =  M0[np.squeeze(np.asarray(s_pos-1)),:].reshape(1,-1).T
-    para = np.insert(para, 10, 0 ,axis =1)
+    para = np.insert(para, 10, 0, axis =1)
     para[0][10]=M0[np.squeeze(np.setdiff1d(np.arange(4*n_mac), s_pos-1)),:]
     P = P0
     tPD = 0
@@ -129,45 +129,54 @@ def ekf_ukf(n_mac, sensorpos, states, M0, P0, Q, para, tsequence, Tfinal):
     iteration_r = 0
     norm_r = 0
     allconverged = 1
-    needTime = []
+    needTime=[]
     tstart1 = tm.time()
-    for k in range(1,Y.shape[1]):
-        M,P,temp_ = ukf_predict1(M,P,f_func,Q,para)
-        p = np.linalg.matrix_rank(P)
-        if p < P.shape[0]:
+    
+    for k in range(1, Y.shape[1]):
+        M, P, _ = ukf_predict1(M, P, f_func, Q, para)
+        p = chol(P)
+        while p == 0:
             num_solve += 1
-            needtm.append([tsequence[k], 1])
+            if k == 1:
+                needTime = np.array([tsequence[k], 1])
+            else:
+                needTime = np.vstack((needTime, [tsequence[k], 1]))
             flag_p = 1
             tstart2 = tm.time()
-            P_tmp = P
-            P,normF,iterations,converged = nearPD_matlab(P_tmp)
+            P_tmp = P.copy()
+            P, normF, iterations, converged = nearPD_python(P_tmp)
+            if converged == 0:
+                allconverged = 0
+            iteration_r += iterations
+            if normF is None:
+                norm_r = normF
+            else:
+                norm_r += normF
+            tPD += tm.time() - tstart2
+            p = chol(P)
+        M, P, _, __, ___ = ukf_update1(M, P, Y[:, k].reshape(1,-1).T, h_func, R, para)
+        p = chol(P)
+        while p == 0:
+            num_solve += 1
+            needTime = np.vstack((needTime, [tsequence[k], 2]))
+            flag_p = 1
+            P_tmp = P.copy()
+            tstart2 = tm.time()
+            P, normF, iterations, converged = nearPD_python(P_tmp)
             if converged == 0:
                 allconverged = 0
             iteration_r += iterations
             norm_r += normF
             tPD += tm.time() - tstart2
-        M,P,temp_,temp__,temp___ = ukf_update1(M,P,Y[:,k].reshape(1,-1).T,h_func,R,para)
-        p = np.linalg.matrix_rank(P)
-        if p < P.shape[0]:
-            num_solve += 1
-            needtm.append([tsequence[k], 2])
-            flag_p = 1
-            P_tmp = P
-            tstart2 = tm.time()
-            P,normF,iterations,converged = nearPD_matlab(P_tmp)
-            if converged == 0:
-                allconverged = 0
-            iteration_r += iterations
-            norm_r += normF
-            tPD += tm.time() - tstart2
-        U_MM_gps[:,k] = np.squeeze(M)
-        U_PP_gps[:,:,k] = P
+            p = chol(P)
+        U_MM_gps[:, k] = np.squeeze(M)
+        U_PP_gps[:, :, k] = np.squeeze(P)
     time_ukfgps = tm.time() - tstart1
     time_record_ukf_gps = [num_solve, tPD, np.float64(iteration_r)/num_solve, np.float64(norm_r)/num_solve, allconverged, flag_p]
     
     time = time_ukfgps
-
-    index3 = error(states,U_MM_gps,para,tsequence,s_pos,n_mac)
+    
+    index3 = error(states,U_MM_gps, para, tsequence, s_pos, n_mac)
     
     index = index3
 
@@ -183,8 +192,8 @@ def error(states, U_MM, para, tsequence, s_pos, n_mac):
     index_edp = 0
     mac_tra_idx = para[0][6]
     for i in range(len(tsequence)):
-        index_delta += 1/n_mac * np.sum((dltX[i,0:n_mac])**2)
-        index_omega += 1/n_mac * np.sum((dltX[i,n_mac:2*n_mac])**2)
+        index_delta += np.float64(1)/n_mac * np.sum((dltX[i,0:n_mac])**2)
+        index_omega += np.float64(1)/n_mac * np.sum((dltX[i,n_mac:2*n_mac])**2)
         index_eqp += np.float64(1)/len(mac_tra_idx) * np.float64(np.sum((dltX[i,2*n_mac:2*n_mac+len(mac_tra_idx)])**2))
         index_edp += np.float64(1)/len(mac_tra_idx) * np.sum((dltX[i,2*n_mac+len(mac_tra_idx):])**2)
     index_delta = np.sqrt(index_delta /(len(tsequence)))
@@ -210,3 +219,10 @@ def error(states, U_MM, para, tsequence, s_pos, n_mac):
     index = np.concatenate(([index_delta, index_omega, index_eqp, index_edp], [np.sum(index_num_dlt), np.sum(index_num_omg), np.sum(index_num_eqp), np.sum(index_num_edp)]))
     
     return index
+    
+def chol(A):
+    try:
+        L = np.linalg.cholesky(A)
+        return 1
+    except np.linalg.LinAlgError:
+        return 0
