@@ -1,7 +1,8 @@
-import numpy as np
+import cupy as cp
 
 def ut_sigmas(M = None, P = None, c = None):
-    A = np.linalg.cholesky(P)
-    X = np.concatenate([np.zeros_like(M), A, -A], axis=1)
-    X = np.sqrt(c) * X + np.tile(M, (1, X.shape[1]))
+    P=cp.asarray(P)
+    A = cp.linalg.cholesky(P)
+    X = cp.concatenate([cp.zeros_like(cp.asarray(M)), A, -A], axis=1)
+    X = cp.sqrt(c) * X + cp.tile(cp.asarray(M), (1, X.shape[1]))
     return X

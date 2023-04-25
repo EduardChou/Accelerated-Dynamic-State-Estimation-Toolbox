@@ -1,11 +1,10 @@
-import numpy as np
+import cupy as cp
 from ut_weights import ut_weights
 from ut_sigmas import ut_sigmas
 
-def ut_transform(M = None,P = None,g = None,g_param = None,tr_param = None):
+def ut_transform(M=None, P=None, g=None, g_param=None, tr_param=None):
     # Apply defaults
-
-    if len(tr_param)==0:
+    if len(tr_param) == 0:
         alpha = None
         beta = None
         kappa = None
@@ -38,9 +37,7 @@ def ut_transform(M = None,P = None,g = None,g_param = None,tr_param = None):
     if mat is None:
         mat = 0
 
-
     # Calculate sigma points
-
     if w is not None:
         WM = w[0]
         c = w[2]
@@ -50,37 +47,41 @@ def ut_transform(M = None,P = None,g = None,g_param = None,tr_param = None):
             WC = w[1]
     else:
         if mat:
-            WM,W,c = ut_mweights(M.shape[1-1],alpha,beta,kappa)
-            X = ut_sigmas(M,P,c)
-            w = [WM,W,c]
+            WM, W, c = ut_mweights(M.shape[1 - 1], alpha, beta, kappa)
+            X = ut_sigmas(M, P, c)
+            w = [WM, W, c]
         else:
-            WM,WC,c = ut_weights(M.shape[1-1],alpha,beta,kappa)
-            X = ut_sigmas(M,P,c)
-            w = [WM,WC,c]
+            WM, WC, c = ut_weights(M.shape[1 - 1], alpha, beta, kappa)
+            X = ut_sigmas(M, P, c)
+            w = [WM, WC, c]
 
     # Propagate through the function
-    if isinstance(g, (int, float, complex, np.number)):
-        Y = g*X
+    if isinstance(g, (int, float, complex, cp.number)):
+        Y = g * X
     else:
         Y = None
-        for i in np.arange(0,X.shape[2-1]).reshape(-1):
-            if(Y is None):
-                Y = g(X[:, i].reshape(1,-1).T, g_param)
+        for i in cp.arange(0, X.shape[2 - 1]).reshape(-1):
+            if (Y is None):
+                Y = g(X[:, i].reshape(1, -1).T, g_param)
             else:
-                Y = np.concatenate([Y, g(X[:, i].reshape(1,-1).T, g_param)],axis=1)
+                Y = cp.concatenate([Y, g(X[:, i].reshape(1, -1).T, g_param)], axis=1)
 
     if mat:
-        mu = np.multiply(Y, WM)
-        S = np.multiply(np.multiply(Y, W), np.transpose(Y))
-        C = np.multiply(np.multiply(X, W), np.transpose(Y))
+        mu = cp.multiply(Y, WM)
+        S = cp.multiply(cp.multiply(Y, W), cp.transpose(Y))
+        C = cp.multiply(cp.multiply(X, W), cp.transpose(Y))
     else:
-        mu = np.zeros((Y.shape[1-1],1))
-        S = np.zeros((Y.shape[1-1],Y.shape[1-1]))
-        C = np.zeros((M.shape[1-1],Y.shape[1-1]))
-        for i in np.arange(0,X.shape[2-1]):
-            mu = mu + WM[i] * Y[:,i].reshape(1,-1).T
-        for i in np.arange(0,X.shape[2-1]):
-            S += WC[i] * np.outer(Y[:, i].reshape(1,-1).T - mu, Y[:, i].reshape(1,-1).T - mu)
-            C += WC[i] * np.outer(X[:M.shape[0], i].reshape(1,-1).T - M, Y[:, i].reshape(1,-1).T - mu)
-    
-    return mu,S,C
+        mu = cp.zeros((Y.shape[1 - 1], 1))
+        S = cp.zeros((Y.shape[1 - 1], Y.shape[1 - 1]))
+        C = cp.zeros((M.shape[1 - 1], Y.shape[1 - 1]))
+        WM = cp.asarray(WM)
+        WC =cp.asarray(WC)
+        M=cp.asarray(M)
+
+        for i in cp.arange(0, X.shape[2 - 1]):
+            mu = mu + WM[i] * Y[:, i].reshape(1, -1).T
+        for i in cp.arange(0, X.shape[2 - 1]):
+            S += WC[i] * cp.outer(Y[:, i].reshape(1, -1).T - mu, Y[:, i].reshape(1, -1).T - mu)
+            C += WC[i] * cp.outer(X[:M.shape[0], i].reshape(1, -1).T - M, Y[:, i].reshape(1, -1).T - mu)
+
+    return mu, S, C

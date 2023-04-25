@@ -169,8 +169,8 @@ def ekf_ukf(n_mac, sensorpos, states, M0, P0, Q, para, tsequence, Tfinal):
             norm_r += normF
             tPD += tm.time() - tstart2
             p = chol(P)
-        U_MM_gps[:, k] = np.squeeze(M)
-        U_PP_gps[:, :, k] = np.squeeze(P)
+        U_MM_gps[:, k] = np.squeeze(M.get())
+        U_PP_gps[:, :, k] = np.squeeze(P.get())
     time_ukfgps = tm.time() - tstart1
     time_record_ukf_gps = [num_solve, tPD, np.float64(iteration_r)/num_solve, np.float64(norm_r)/num_solve, allconverged, flag_p]
     
