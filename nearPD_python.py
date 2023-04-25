@@ -1,9 +1,9 @@
+import cupy as cp
 import numpy as np
 
 def nearPD_python(mat, max_iter=100, tol=1e-6):
-    # Get the symmetric part of the matrix
-    sym_part = 0.5 * (mat + mat.T)
-
+    # Copy the input matrix to the GPU
+    sym_part = cp.asarray(0.5 * (mat + mat.T))
     # Initialize the output variables
     converged = False
     iterations = 0
@@ -12,16 +12,16 @@ def nearPD_python(mat, max_iter=100, tol=1e-6):
     # Perform the iterative algorithm
     for i in range(max_iter):
         # Compute the eigenvalue decomposition of the symmetric part
-        eigvals, eigvecs = np.linalg.eigh(sym_part)
+        eigvals, eigvecs = cp.linalg.eigh(sym_part)
 
         # Compute the diagonal matrix of eigenvalues
-        D = np.diag(eigvals)
+        D = cp.diag(eigvals)
 
         # Compute the nearest positive definite matrix
-        mat_new = eigvecs @ np.maximum(D, np.zeros_like(D)) @ eigvecs.T
+        mat_new = eigvecs @ cp.maximum(D, cp.zeros_like(D)) @ eigvecs.T
 
         # Compute the Frobenius norm of the difference between the old and new matrices
-        normF = np.linalg.norm(mat - mat_new, 'fro')
+        normF = cp.linalg.norm(cp.asarray(mat) - cp.asarray(mat_new), 'fro')
 
         # Check if the algorithm has converged
         if normF < tol:
@@ -29,10 +29,14 @@ def nearPD_python(mat, max_iter=100, tol=1e-6):
             break
 
         # Update the symmetric part with the new matrix
-        sym_part = 0.5 * (mat_new + mat_new.T)
+        sym_part = cp.asarray(0.5 * (mat_new + mat_new.T))
 
         # Update the iteration counter
         iterations = i + 1
+
+    # Copy the output matrices back to the CPU
+    mat_new = cp.asnumpy(mat_new)
+    normF = cp.asnumpy(normF)
 
     # Return the output variables
     return mat_new, normF, iterations, converged
